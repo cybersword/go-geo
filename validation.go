@@ -24,6 +24,22 @@ type TaskPackageInfo struct {
 	Data map[string]string
 }
 
+// PackageURLInfo package_info_record.url_info
+type PackageURLInfo struct {
+	global map[string]string
+	List   []struct {
+		Mesh_id   string
+		Refer_url struct {
+			Exto_pano []struct {
+				Pano_id string
+				URL     string
+			}
+			qi string
+		}
+		data_url string
+	}
+}
+
 // GKDataType 果壳数据规格, 表结构等
 type GKDataType uint32
 
@@ -149,7 +165,7 @@ func download(url string, dir string, name string) error {
 	return nil
 }
 
-func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]TaskPackageInfo, err error) {
+func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]PackageURLInfo, err error) {
 	// mysql -hgzns-ns-map-guoke46.gzns -uroot -proot guoke_dawn
 	db, err := sql.Open("mysql", "root:root@tcp(gzns-ns-map-guoke46.gzns.baidu.com:3306)/guoke_dawn?charset=utf8")
 	if err != nil {
@@ -169,8 +185,43 @@ func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]TaskPackageInfo, err err
 	if err != nil {
 		return
 	}
-	fmt.Println(downloadID, uploadID)
+	fmt.Println("pir_id: (download / upload)", downloadID, uploadID)
 
+	var infoJSON string
+	rows, err = db.Query("SELECT url_info FROM package_info_record WHERE pir_id = " + downloadID)
+	if err != nil {
+		return
+	}
+	if !rows.Next() {
+		err = errors.New("download pir_id not exists : " + downloadID)
+		return
+	}
+	err = rows.Scan(&infoJSON)
+	if err != nil {
+		return
+	}
+	fmt.Println("download JSON : ", infoJSON)
+	err = json.Unmarshal([]byte(infoJSON), tpi[0])
+	if err != nil {
+		return
+	}
+	rows, err = db.Query("SELECT url_info FROM package_info_record WHERE pir_id = " + uploadID)
+	if err != nil {
+		return
+	}
+	if !rows.Next() {
+		err = errors.New("upload pir_id not exists : " + uploadID)
+		return
+	}
+	err = rows.Scan(&infoJSON)
+	if err != nil {
+		return
+	}
+	fmt.Println("upload JSON : ", infoJSON)
+	err = json.Unmarshal([]byte(infoJSON), tpi[0])
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -240,6 +291,38 @@ func getGKDatas(dir string, gkDataType GKDataType) []Sqlite3 {
 func main() {
 	fmt.Println("daemon :", daemon)
 	dir := flag.Arg(0)
+	taskID := "93721"
+	tpi, err := getTaskPackageInfoFromMySQL(taskID)
+	if err != nil {
+		fmt.Println("faild : ", err)
+	}
+	var urlDownload map[string]string
+	var urlUpload map[string]string
+	for _, mesh := range tpi[0].List {
+		meshID := mesh.Mesh_id
+		panos := mesh.Refer_url.Exto_pano
+		for _, pano := range panos {
+			urlDownload[meshID+"_"+pano.Pano_id] = pano.URL
+		}
+	}
+	for _, mesh := range tpi[1].List {
+		meshID := mesh.Mesh_id
+		panos := mesh.Refer_url.Exto_pano
+		for _, pano := range panos {
+			urlUpload[meshID+"_"+pano.Pano_id] = pano.URL
+		}
+	}
+
+	for name, url := range urlDownload {
+		download(url, dir, name+".exto")
+	}
+	for name, url := range urlUpload {
+		download(url, dir, name+".exto")
+	}
+	//path, err := getTaskPackage(taskID, "/Users/baidu/work")
+
+	//fmt.Println("download : ", path)
+
 	chOK := make(chan string, 5)
 	chErr := make(chan string, 5)
 	extoList := getGKDatas(dir, EXTO)
@@ -268,12 +351,4 @@ func main() {
 	close(chOK)
 	fmt.Printf("err num : %v / %v \n", numErr, len(extoList))
 
-	taskID := "93721"
-	_, err := getTaskPackageInfoFromMySQL(taskID)
-
-	//path, err := getTaskPackage(taskID, "/Users/baidu/work")
-	if err != nil {
-		fmt.Println("download faild : ", err)
-	}
-	//fmt.Println("download : ", path)
 }
