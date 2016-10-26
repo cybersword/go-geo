@@ -201,7 +201,7 @@ func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]PackageURLInfo, err erro
 		return
 	}
 	fmt.Println("download JSON : ", infoJSON)
-	err = json.Unmarshal([]byte(infoJSON), tpi[0])
+	err = json.Unmarshal([]byte(infoJSON), &tpi[0])
 	if err != nil {
 		return
 	}
@@ -218,7 +218,7 @@ func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]PackageURLInfo, err erro
 		return
 	}
 	fmt.Println("upload JSON : ", infoJSON)
-	err = json.Unmarshal([]byte(infoJSON), tpi[0])
+	err = json.Unmarshal([]byte(infoJSON), &tpi[1])
 	if err != nil {
 		return
 	}
@@ -296,8 +296,8 @@ func main() {
 	if err != nil {
 		fmt.Println("faild : ", err)
 	}
-	var urlDownload map[string]string
-	var urlUpload map[string]string
+	urlDownload := map[string]string{}
+	urlUpload := map[string]string{}
 	for _, mesh := range tpi[0].List {
 		meshID := mesh.Mesh_id
 		panos := mesh.Refer_url.Exto_pano
@@ -312,12 +312,13 @@ func main() {
 			urlUpload[meshID+"_"+pano.Pano_id] = pano.URL
 		}
 	}
+	fmt.Println(len(urlDownload), len(urlUpload))
 
 	for name, url := range urlDownload {
-		download(url, dir, name+".exto")
+		download(url, dir, "down_"+name+".exto")
 	}
 	for name, url := range urlUpload {
-		download(url, dir, name+".exto")
+		download(url, dir, "up_"+name+".exto")
 	}
 	//path, err := getTaskPackage(taskID, "/Users/baidu/work")
 
