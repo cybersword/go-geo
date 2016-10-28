@@ -291,7 +291,8 @@ func getGKDatas(dir string, gkDataType GKDataType) []Sqlite3 {
 func main() {
 	fmt.Println("daemon :", daemon)
 	dir := flag.Arg(0)
-	taskID := "93721"
+	// taskID := "93721"  // 有错误的任务
+	taskID := "97264" // 190 exto
 	tpi, err := getTaskPackageInfoFromMySQL(taskID)
 	if err != nil {
 		fmt.Println("faild : ", err)
@@ -314,12 +315,27 @@ func main() {
 	}
 	fmt.Println(len(urlDownload), len(urlUpload))
 
+	chDownload := make(chan int, 500)
 	for name, url := range urlDownload {
-		download(url, dir, "down_"+name+".exto")
+		go func(n string, u string) {
+			download(u, dir, "down_"+n+".exto")
+		}(name, url)
+		chDownload <- 1
 	}
 	for name, url := range urlUpload {
-		download(url, dir, "up_"+name+".exto")
+		go func(n string, u string) {
+			download(u, dir, "up_"+n+".exto")
+		}(name, url)
+		chDownload <- 1
 	}
+	close(chDownload)
+	// wait download done
+	sum := 0
+	for n := range chDownload {
+		sum += n
+	}
+	fmt.Println("num of download : ", sum)
+
 	//path, err := getTaskPackage(taskID, "/Users/baidu/work")
 
 	//fmt.Println("download : ", path)
