@@ -165,7 +165,13 @@ func download(url string, dir string, name string) error {
 	return nil
 }
 
-func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]PackageURLInfo, err error) {
+func getTaskPackageInfoFromJSON(j string) (pi PackageURLInfo, err error) {
+	err = json.Unmarshal([]byte(j), &pi)
+	return
+}
+
+// 0 下载, 1 上传
+func getJSONFromMySQL(taskid string) (j [2]string, err error) {
 	// mysql -hgzns-ns-map-guoke46.gzns -uroot -proot guoke_dawn
 	db, err := sql.Open("mysql", "root:root@tcp(gzns-ns-map-guoke46.gzns.baidu.com:3306)/guoke_dawn?charset=utf8")
 	if err != nil {
@@ -187,7 +193,6 @@ func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]PackageURLInfo, err erro
 	}
 	fmt.Println("pir_id: (download / upload)", downloadID, uploadID)
 
-	var infoJSON string
 	rows, err = db.Query("SELECT url_info FROM package_info_record WHERE pir_id = " + downloadID)
 	if err != nil {
 		return
@@ -196,15 +201,12 @@ func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]PackageURLInfo, err erro
 		err = errors.New("download pir_id not exists : " + downloadID)
 		return
 	}
-	err = rows.Scan(&infoJSON)
+	err = rows.Scan(&j[0])
 	if err != nil {
 		return
 	}
-	fmt.Println("download JSON : ", infoJSON)
-	err = json.Unmarshal([]byte(infoJSON), &tpi[0])
-	if err != nil {
-		return
-	}
+	//fmt.Println("download JSON : ", infoJSON)
+
 	rows, err = db.Query("SELECT url_info FROM package_info_record WHERE pir_id = " + uploadID)
 	if err != nil {
 		return
@@ -213,15 +215,12 @@ func getTaskPackageInfoFromMySQL(taskid string) (tpi [2]PackageURLInfo, err erro
 		err = errors.New("upload pir_id not exists : " + uploadID)
 		return
 	}
-	err = rows.Scan(&infoJSON)
+	err = rows.Scan(&j[1])
 	if err != nil {
 		return
 	}
-	fmt.Println("upload JSON : ", infoJSON)
-	err = json.Unmarshal([]byte(infoJSON), &tpi[1])
-	if err != nil {
-		return
-	}
+	//fmt.Println("upload JSON : ", infoJSON)
+
 	return
 }
 
@@ -288,53 +287,82 @@ func getGKDatas(dir string, gkDataType GKDataType) []Sqlite3 {
 	return datas
 }
 
+func getJSONFromFile(path string) (j string, err error) {
+	fi, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer fi.Close()
+	fd, err := ioutil.ReadAll(fi)
+
+	// fmt.Println(string(fd))
+	j = string(fd)
+	return
+}
+
 func main() {
-	fmt.Println("daemon :", daemon)
+	p := fmt.Println
+	p("daemon :", daemon)
 	dir := flag.Arg(0)
+	pathJSON := flag.Arg(1)
 	// taskID := "93721"  // 有错误的任务
-	taskID := "97264" // 190 exto
-	tpi, err := getTaskPackageInfoFromMySQL(taskID)
+	// taskID := "97264" // 190 exto
+	// j, err := getJSONFromMySQL(taskID)
+	// piDown, err := getTaskPackageInfoFromJSON(j[0])
+	// piUp, err := getTaskPackageInfoFromJSON(j[1])
+
+	j, err := getJSONFromFile(pathJSON)
+	pi, err := getTaskPackageInfoFromJSON(j)
+	piDown := pi
+	piUp := pi
 	if err != nil {
 		fmt.Println("faild : ", err)
 	}
 	urlDownload := map[string]string{}
 	urlUpload := map[string]string{}
-	for _, mesh := range tpi[0].List {
+	for _, mesh := range piDown.List {
 		meshID := mesh.Mesh_id
 		panos := mesh.Refer_url.Exto_pano
 		for _, pano := range panos {
 			urlDownload[meshID+"_"+pano.Pano_id] = pano.URL
 		}
 	}
-	for _, mesh := range tpi[1].List {
+	for _, mesh := range piUp.List {
 		meshID := mesh.Mesh_id
 		panos := mesh.Refer_url.Exto_pano
 		for _, pano := range panos {
 			urlUpload[meshID+"_"+pano.Pano_id] = pano.URL
 		}
 	}
-	fmt.Println(len(urlDownload), len(urlUpload))
+	p(len(urlDownload), len(urlUpload))
 
-	chDownload := make(chan int, 500)
+	chDownload := make(chan int, 10)
+
 	for name, url := range urlDownload {
 		go func(n string, u string) {
-			download(u, dir, "down_"+n+".exto")
+			fn := "down_" + n + ".exto"
+			p(fn, "download start")
+			download(u, dir, fn)
+			p(fn, "download end")
+			chDownload <- 1
 		}(name, url)
-		chDownload <- 1
 	}
 	for name, url := range urlUpload {
 		go func(n string, u string) {
-			download(u, dir, "up_"+n+".exto")
+			fn := "up_" + n + ".exto"
+			p(fn, "download start")
+			download(u, dir, fn)
+			p(fn, "download end")
+			chDownload <- 1
 		}(name, url)
-		chDownload <- 1
 	}
-	close(chDownload)
+	// close(chDownload)
 	// wait download done
 	sum := 0
-	for n := range chDownload {
-		sum += n
+	for sum < len(urlDownload)+len(urlUpload) {
+		sum += <-chDownload
 	}
-	fmt.Println("num of download : ", sum)
+	p("num of download : ", sum)
 
 	//path, err := getTaskPackage(taskID, "/Users/baidu/work")
 
