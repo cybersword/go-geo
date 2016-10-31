@@ -18,18 +18,18 @@ type PackageZIP struct {
 
 // PackageInfo 对应 package_info_record.url_info 字段的值.
 type PackageInfo struct {
-	global map[string]string
+	Global map[string]string `json:"global"`
 	List   []struct {
-		Mesh_id   string
-		Refer_url struct {
-			Exto_pano []struct {
-				Pano_id string
-				URL     string
-			}
-			qi string
-		}
-		data_url string
-	}
+		MeshID   string `json:"mesh_id"`
+		ReferURL struct {
+			ExtoPano []struct {
+				PanoID string `json:"pano_id"`
+				URL    string `json:"url"`
+			} `json:"exto_pano"`
+			Qi string `json:"qi"`
+		} `json:"refer_url"`
+		DataURL string `json:"data_url"`
+	} `json:"list"`
 }
 
 var dsnDawn string

@@ -56,10 +56,10 @@ func main() {
 	}
 	mapURL := map[string]string{}
 	for _, mesh := range pi.List {
-		meshID := mesh.Mesh_id
-		panos := mesh.Refer_url.Exto_pano
+		meshID := mesh.MeshID
+		panos := mesh.ReferURL.ExtoPano
 		for _, pano := range panos {
-			mapURL[meshID+"_"+pano.Pano_id] = pano.URL
+			mapURL[meshID+"_"+pano.PanoID] = pano.URL
 		}
 	}
 	numURL := len(mapURL)
