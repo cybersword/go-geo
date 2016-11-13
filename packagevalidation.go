@@ -100,5 +100,6 @@ func main() {
 	close(chOK)
 
 	p("损坏个数/总数:", numErr, "/", numURL)
+	p("done")
 
 }
